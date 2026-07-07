@@ -18,7 +18,8 @@ http.createServer((req, res) => {
     if (!openai) {
         openai = new OpenAI({
             apiKey: req.headers["authorization"].split(" ").pop(),
-            baseURL: "https://generativelanguage.googleapis.com/v1beta/"
+            baseURL: "https://generativelanguage.googleapis.com/v1beta/",
+            maxRetries: 0
         });
     }
 
@@ -37,7 +38,23 @@ http.createServer((req, res) => {
 
         // you can edit payload.messages[0].content directly to change the character definition instead of trying to prompt around it
 
-        const stream = await openai.chat.completions.create({ ...payload, reasoning_effort: "minimal" }); // janitor doesn't expose a reasoning_effort setting
+        let stream;
+
+        while (!stream) {
+            try {
+                stream = await openai.chat.completions.create({
+                    ...payload,
+                    reasoning_effort: "minimal" // janitor doesn't expose a reasoning_effort setting
+                });
+            } catch(e) {
+                console.error(e);
+
+                if (e.status && e.status < 500 && e.status !== 429) {
+                    res.end();
+                    return;
+                }
+            }
+        }
 
         for await (const chunk of stream.iterator()) {
             if (!chunk || chunk.error) break;
