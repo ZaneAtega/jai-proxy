@@ -15,21 +15,15 @@ http.createServer((req, res) => {
         return;
     }
 
-    if (!openai) {
+    const apiKey = req.headers["authorization"].split(" ")[1];
+
+    if (apiKey !== openai?.apiKey) {
         openai = new OpenAI({
-            apiKey: req.headers["authorization"].split(" ").pop(),
+            apiKey,
             baseURL: "https://generativelanguage.googleapis.com/v1beta/",
             maxRetries: 0
         });
     }
-
-    res.writeHead(200, {
-        ...corsHeaders,
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive"
-    });
-    res.flushHeaders();
 
     let body = "";
     req.on("data", chunk => body += chunk);
@@ -49,12 +43,20 @@ http.createServer((req, res) => {
             } catch(e) {
                 console.error(e);
 
-                if (e.status && e.status < 500 && e.status !== 429) {
+                if (e.status && e.status < 500) {
+                    res.writeHead(e.status, corsHeaders);
                     res.end();
                     return;
                 }
             }
         }
+
+        res.writeHead(200, {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        });
 
         for await (const chunk of stream.iterator()) {
             if (!chunk || chunk.error) break;
