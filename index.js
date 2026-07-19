@@ -1,6 +1,9 @@
 import http from "http";
+import fs from "fs/promises";
+import os from "os";
 
 import OpenAI from "openai";
+
 let openai;
 
 const corsHeaders = {
@@ -20,7 +23,7 @@ http.createServer((req, res) => {
     if (apiKey !== openai?.apiKey) {
         openai = new OpenAI({
             apiKey,
-            baseURL: "https://generativelanguage.googleapis.com/v1beta/",
+            baseURL: "http://127.0.0.1:6970/v1/",
             maxRetries: 0
         });
     }
@@ -30,7 +33,36 @@ http.createServer((req, res) => {
     req.on("end", async () => {
         const payload = JSON.parse(body);
 
-        // you can edit payload.messages[0].content directly to change the character definition instead of trying to prompt around it
+        let system = payload.messages[0].content; 
+        let name = system.slice(2, system.indexOf("'s Persona>"));
+
+        // payload.messages[0].content = system; // you can edit the character definition directly instead of trying to prompt around it
+
+        name += ` (${system.length})`;
+        const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+        const preset = {
+            identifier: `@local:${slug}`,
+            name: name,
+            changed: true,
+            operation: {
+                fields: [{
+                    key: "llm.prediction.systemPrompt",
+                    value: system.replace(/<UserPersona>.*?<\/UserPersona>\n/s, "")
+                }]
+            },
+            load: {
+                fields: []
+            }
+        };
+
+        const path = `${os.homedir()}\\.lmstudio\\config-presets\\${slug}.preset.json`;
+
+        try {
+            await fs.access(path);
+        } catch {
+            await fs.writeFile(path, JSON.stringify(preset, null, 2));
+        }
 
         let stream;
 
